@@ -1,0 +1,1162 @@
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local Config = {
+    Toggle = true,
+    TeamCheck = false,
+    PlayerNameType = "DisplayName",
+    UpdateInterval = 0.1,
+    ToggleKey = Enum.KeyCode.RightBracket,
+    Aimbot = {
+        Enabled = false,
+        TeamCheck = true,
+        VisibilityCheck = true,
+        FOV = 150,
+        Smoothing = 1,
+        ToggleKey = Enum.KeyCode.F
+    },
+    ESP = {
+        FillTransparency = 0.5,
+        OutlineTransparency = 0,
+        TextSize = 18,
+        Font = Enum.Font.SciFi,
+        ShowOutline = true,
+        ShowLines = true,
+        FillColor = Color3.fromRGB(255, 255, 255),
+        OutlineColor = Color3.fromRGB(255, 255, 255),
+        TextColor = Color3.fromRGB(255, 255, 255),
+        LineColor = Color3.fromRGB(255, 255, 255),
+        TeamColor = Color3.fromRGB(0, 255, 0),
+        EnemyColor = Color3.fromRGB(255, 0, 0),
+        RainbowMode = false
+    }
+}
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local ESPInstances = {}
+local Debounce = false
+local GUIFrame = nil
+local Lines = {}
+local GUIButtons = {}
+local MenuCollapsed = false
+local ColorPalette = nil
+
+-- Aimbot variables
+local FOVring = nil
+local aimbotConnection = nil
+local aimbotEnabled = false
+
+local function GetPlayerName(player)
+    return player[Config.PlayerNameType] or player.Name
+end
+
+local function GetHealth(player)
+    if not player.Character then
+        return "N/A"
+    end
+    
+    local humanoid = player.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        return math.floor(humanoid.Health * 10) / 10
+    end
+    return "N/A"
+end
+
+local function ShouldShowESP(player)
+    if player == LocalPlayer then
+        return false
+    end
+    
+    if not player.Character then
+        return false
+    end
+    
+    return true
+end
+
+local function IsPlayerVisible(player)
+    if not Config.Aimbot.VisibilityCheck then
+        return true
+    end
+    
+    local camera = workspace.CurrentCamera
+    if not camera then return false end
+    
+    local character = player.Character
+    if not character or not character:FindFirstChild("Head") then
+        return false
+    end
+    
+    local head = character.Head
+    local ray = Ray.new(camera.CFrame.Position, (head.Position - camera.CFrame.Position).Unit)
+    local hit, _ = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character, character})
+    
+    return not hit
+end
+
+local function GetRainbowColor()
+    local time = tick()
+    local hue = (time * 50) % 360
+    return Color3.fromHSV(hue / 360, 1, 1)
+end
+
+local function GetPlayerColor(player)
+    if Config.ESP.RainbowMode then
+        return GetRainbowColor()
+    elseif Config.TeamCheck then
+        if player.TeamColor == LocalPlayer.TeamColor then
+            return Config.ESP.TeamColor
+        else
+            return Config.ESP.EnemyColor
+        end
+    else
+        return Config.ESP.FillColor
+    end
+end
+
+local function GetPlayerOutlineColor(player)
+    if Config.ESP.RainbowMode then
+        return GetRainbowColor()
+    elseif Config.TeamCheck then
+        if player.TeamColor == LocalPlayer.TeamColor then
+            return Config.ESP.TeamColor
+        else
+            return Config.ESP.EnemyColor
+        end
+    else
+        return Config.ESP.OutlineColor
+    end
+end
+
+local function GetPlayerTextColor(player)
+    if Config.ESP.RainbowMode then
+        return GetRainbowColor()
+    else
+        return Config.ESP.TextColor
+    end
+end
+
+local function GetPlayerLineColor(player)
+    if Config.ESP.RainbowMode then
+        return GetRainbowColor()
+    else
+        return Config.ESP.LineColor
+    end
+end
+
+local function CreateESPHighlight(player)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESP_Highlight"
+    highlight.Adornee = player.Character
+    highlight.Archivable = true
+    highlight.Enabled = true
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = GetPlayerColor(player)
+    highlight.FillTransparency = Config.ESP.FillTransparency
+    highlight.OutlineColor = GetPlayerOutlineColor(player)
+    highlight.OutlineTransparency = Config.ESP.ShowOutline and Config.ESP.OutlineTransparency or 1
+    highlight.Parent = player.Character
+    
+    return highlight
+end
+
+local function CreateESPText(player)
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Name = "ESP_Billboard"
+    billboardGui.Parent = player.Character
+    billboardGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    billboardGui.Active = true
+    billboardGui.AlwaysOnTop = true
+    billboardGui.ExtentsOffset = Vector3.new(0, 1, 0)
+    billboardGui.LightInfluence = 1
+    billboardGui.Size = UDim2.new(0, 800, 0, 50)
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Name = "ESP_Text"
+    textLabel.Parent = billboardGui
+    textLabel.BackgroundColor3 = GetPlayerTextColor(player)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Size = UDim2.new(0, 800, 0, 50)
+    textLabel.Font = Config.ESP.Font
+    textLabel.Text = "Loading..."
+    textLabel.TextColor3 = GetPlayerTextColor(player)
+    textLabel.TextSize = Config.ESP.TextSize
+    textLabel.TextWrapped = true
+    
+    return billboardGui, textLabel
+end
+
+local function CreateLine(player)
+    local line = Drawing.new("Line")
+    line.Visible = Config.ESP.ShowLines and Config.Toggle
+    line.Color = GetPlayerLineColor(player)
+    line.Thickness = 2
+    line.Transparency = 1
+    Lines[player] = line
+    return line
+end
+
+local function UpdateESPText(player, textLabel)
+    local name = GetPlayerName(player)
+    local health = GetHealth(player)
+    
+    local text = string.format("%s | Health: %s", name, health)
+    
+    textLabel.Text = text
+    textLabel.TextColor3 = GetPlayerTextColor(player)
+end
+
+local function UpdateLines()
+    if not Config.ESP.ShowLines or not Config.Toggle then
+        for _, line in pairs(Lines) do
+            line.Visible = false
+        end
+        return
+    end
+    
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    
+    for player, line in pairs(Lines) do
+        if ShouldShowESP(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local rootPart = player.Character.HumanoidRootPart
+            local screenPos, onScreen = camera:WorldToViewportPoint(rootPart.Position)
+            
+            if onScreen then
+                line.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                line.To = Vector2.new(screenPos.X, screenPos.Y)
+                line.Visible = true
+                line.Color = GetPlayerLineColor(player)
+            else
+                line.Visible = false
+            end
+        else
+            line.Visible = false
+        end
+    end
+end
+
+local function ClearAllESP()
+    for player, espData in pairs(ESPInstances) do
+        if espData.highlight then
+            espData.highlight:Destroy()
+        end
+        if espData.billboard then
+            espData.billboard:Destroy()
+        end
+    end
+    ESPInstances = {}
+    
+    for player, line in pairs(Lines) do
+        line:Remove()
+    end
+    Lines = {}
+end
+
+local function UpdateESP()
+    if not Config.Toggle then
+        ClearAllESP()
+        return
+    end
+    
+    if Debounce then
+        return
+    end
+    
+    Debounce = true
+    
+    pcall(function()
+        for _, player in pairs(Players:GetChildren()) do
+            if not player:IsA("Player") then
+                continue
+            end
+            
+            if not ShouldShowESP(player) then
+                if ESPInstances[player] then
+                    if ESPInstances[player].highlight then
+                        ESPInstances[player].highlight:Destroy()
+                    end
+                    if ESPInstances[player].billboard then
+                        ESPInstances[player].billboard:Destroy()
+                    end
+                    ESPInstances[player] = nil
+                end
+                if Lines[player] then
+                    Lines[player]:Remove()
+                    Lines[player] = nil
+                end
+                continue
+            end
+            
+            if not ESPInstances[player] then
+                ESPInstances[player] = {}
+            end
+            
+            if not ESPInstances[player].highlight then
+                ESPInstances[player].highlight = CreateESPHighlight(player)
+            else
+                ESPInstances[player].highlight.FillColor = GetPlayerColor(player)
+                ESPInstances[player].highlight.OutlineColor = GetPlayerOutlineColor(player)
+                ESPInstances[player].highlight.OutlineTransparency = Config.ESP.ShowOutline and Config.ESP.OutlineTransparency or 1
+            end
+            
+            if not ESPInstances[player].billboard then
+                ESPInstances[player].billboard, ESPInstances[player].textLabel = CreateESPText(player)
+            else
+                UpdateESPText(player, ESPInstances[player].textLabel)
+            end
+            
+            if not Lines[player] then
+                Lines[player] = CreateLine(player)
+            end
+        end
+        
+        UpdateLines()
+    end)
+    
+    Debounce = false
+end
+
+local function OnPlayerRemoving(player)
+    if ESPInstances[player] then
+        if ESPInstances[player].highlight then
+            ESPInstances[player].highlight:Destroy()
+        end
+        if ESPInstances[player].billboard then
+            ESPInstances[player].billboard:Destroy()
+        end
+        ESPInstances[player] = nil
+    end
+    if Lines[player] then
+        Lines[player]:Remove()
+        Lines[player] = nil
+    end
+end
+
+local function GetClosestVisiblePlayer(camera)
+    local closestPlayer = nil
+    local closestDistance = math.huge
+    
+    for _, player in pairs(Players:GetChildren()) do
+        if not player:IsA("Player") or player == LocalPlayer then
+            continue
+        end
+        
+        if Config.Aimbot.TeamCheck and player.TeamColor == LocalPlayer.TeamColor then
+            continue
+        end
+        
+        if not IsPlayerVisible(player) then
+            continue
+        end
+        
+        local character = player.Character
+        if character and character:FindFirstChild("Head") then
+            local headPosition = character.Head.Position
+            local screenPosition, onScreen = camera:WorldToViewportPoint(headPosition)
+            
+            if onScreen then
+                local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - camera.ViewportSize / 2).Magnitude
+                if distance < Config.Aimbot.FOV and distance < closestDistance then
+                    closestDistance = distance
+                    closestPlayer = player
+                end
+            end
+        end
+    end
+    
+    return closestPlayer
+end
+
+local function UpdateAimbot()
+    if not aimbotEnabled then return end
+    
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    
+    local closestPlayer = GetClosestVisiblePlayer(camera)
+    
+    if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head") then
+        local headPosition = closestPlayer.Character.Head.Position
+        camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, headPosition), Config.Aimbot.Smoothing)
+    end
+end
+
+local function ToggleAimbot()
+    aimbotEnabled = not aimbotEnabled
+    
+    if aimbotEnabled then
+        if not FOVring then
+            FOVring = Drawing.new("Circle")
+            FOVring.Visible = true
+            FOVring.Thickness = 1.5
+            FOVring.Radius = Config.Aimbot.FOV
+            FOVring.Transparency = 1
+            FOVring.Color = Color3.fromRGB(255, 128, 128)
+            FOVring.Position = workspace.CurrentCamera.ViewportSize / 2
+        end
+        
+        if not aimbotConnection then
+            aimbotConnection = RunService.RenderStepped:Connect(UpdateAimbot)
+        end
+    else
+        if FOVring then
+            FOVring:Remove()
+            FOVring = nil
+        end
+        
+        if aimbotConnection then
+            aimbotConnection:Disconnect()
+            aimbotConnection = nil
+        end
+    end
+    
+    UpdateGUIButtons()
+end
+
+local function UpdateGUIButtons()
+    if GUIButtons.toggleButton then
+        GUIButtons.toggleButton.Text = Config.Toggle and "ESP: ON" or "ESP: OFF"
+    end
+    if GUIButtons.outlineButton then
+        GUIButtons.outlineButton.Text = Config.ESP.ShowOutline and "Outline: ON" or "Outline: OFF"
+    end
+    if GUIButtons.linesButton then
+        GUIButtons.linesButton.Text = Config.ESP.ShowLines and "Lines: ON" or "Lines: OFF"
+    end
+    if GUIButtons.keyButton then
+        GUIButtons.keyButton.Text = "Key: [" .. Config.ToggleKey.Name:sub(8) .. "]"
+    end
+    if GUIButtons.teamCheckButton then
+        GUIButtons.teamCheckButton.Text = Config.TeamCheck and "Team Check: ON" or "Team Check: OFF"
+    end
+    if GUIButtons.rainbowButton then
+        GUIButtons.rainbowButton.Text = Config.ESP.RainbowMode and "Rainbow: ON" or "Rainbow: OFF"
+    end
+    if GUIButtons.aimbotButton then
+        GUIButtons.aimbotButton.Text = aimbotEnabled and "Aimbot: ON" or "Aimbot: OFF"
+    end
+    if GUIButtons.aimbotKeyButton then
+        GUIButtons.aimbotKeyButton.Text = "Aimbot Key: [" .. Config.Aimbot.ToggleKey.Name:sub(8) .. "]"
+    end
+    if GUIButtons.visibilityButton then
+        GUIButtons.visibilityButton.Text = Config.Aimbot.VisibilityCheck and "Visibility: ON" or "Visibility: OFF"
+    end
+    if GUIButtons.aimbotTeamCheckButton then
+        GUIButtons.aimbotTeamCheckButton.Text = Config.Aimbot.TeamCheck and "Aimbot Team Check: ON" or "Aimbot Team Check: OFF"
+    end
+end
+
+local function CreateColorPalette(colorType, button)
+    if ColorPalette then
+        ColorPalette:Destroy()
+    end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "ColorPalette"
+    screenGui.Parent = game.CoreGui
+    
+    local paletteFrame = Instance.new("Frame")
+    paletteFrame.Name = "PaletteFrame"
+    paletteFrame.Size = UDim2.new(0, 200, 0, 250)
+    paletteFrame.Position = UDim2.new(0.5, -100, 0.5, -125)
+    paletteFrame.BackgroundColor3 = Color3.fromRGB(30, 40, 70)
+    paletteFrame.BorderSizePixel = 0
+    paletteFrame.Parent = screenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = paletteFrame
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "Title"
+    titleLabel.Size = UDim2.new(1, 0, 0, 30)
+    titleLabel.Position = UDim2.new(0, 0, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "Color Palette"
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextScaled = true
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Parent = paletteFrame
+    
+    local colors = {
+        Color3.fromRGB(255, 0, 0),    -- Red
+        Color3.fromRGB(0, 255, 0),    -- Green
+        Color3.fromRGB(0, 0, 255),    -- Blue
+        Color3.fromRGB(255, 255, 0),  -- Yellow
+        Color3.fromRGB(255, 0, 255),  -- Magenta
+        Color3.fromRGB(0, 255, 255),  -- Cyan
+        Color3.fromRGB(255, 255, 255), -- White
+        Color3.fromRGB(255, 165, 0),  -- Orange
+        Color3.fromRGB(128, 0, 128),  -- Purple
+        Color3.fromRGB(0, 255, 127),  -- Spring Green
+        Color3.fromRGB(255, 20, 147), -- Deep Pink
+        Color3.fromRGB(0, 191, 255),  -- Deep Sky Blue
+        Color3.fromRGB(255, 215, 0),  -- Gold
+        Color3.fromRGB(50, 205, 50),  -- Lime Green
+        Color3.fromRGB(138, 43, 226), -- Blue Violet
+        Color3.fromRGB(255, 69, 0)    -- Red Orange
+    }
+    
+    local selectedColor = nil
+    local colorButtons = {}
+    
+    for i, color in ipairs(colors) do
+        local colorButton = Instance.new("TextButton")
+        colorButton.Size = UDim2.new(0, 40, 0, 40)
+        colorButton.Position = UDim2.new(0, 10 + ((i-1) % 4) * 45, 0, 40 + math.floor((i-1) / 4) * 45)
+        colorButton.BackgroundColor3 = color
+        colorButton.BorderSizePixel = 2
+        colorButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
+        colorButton.Parent = paletteFrame
+        
+        local colorCorner = Instance.new("UICorner")
+        colorCorner.CornerRadius = UDim.new(0, 6)
+        colorCorner.Parent = colorButton
+        
+        colorButton.MouseButton1Click:Connect(function()
+            for _, btn in pairs(colorButtons) do
+                btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+            end
+            colorButton.BorderColor3 = Color3.fromRGB(255, 255, 0)
+            selectedColor = color
+        end)
+        
+        table.insert(colorButtons, colorButton)
+    end
+    
+    local acceptButton = Instance.new("TextButton")
+    acceptButton.Size = UDim2.new(0.4, 0, 0, 30)
+    acceptButton.Position = UDim2.new(0.3, 0, 1, -40)
+    acceptButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    acceptButton.Text = "Accept"
+    acceptButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    acceptButton.TextScaled = true
+    acceptButton.Font = Enum.Font.GothamBold
+    acceptButton.Parent = paletteFrame
+    
+    local acceptCorner = Instance.new("UICorner")
+    acceptCorner.CornerRadius = UDim.new(0, 6)
+    acceptCorner.Parent = acceptButton
+    
+    acceptButton.MouseButton1Click:Connect(function()
+        if selectedColor then
+            if colorType == "fill" then
+                Config.ESP.FillColor = selectedColor
+                button.BackgroundColor3 = selectedColor
+            elseif colorType == "outline" then
+                Config.ESP.OutlineColor = selectedColor
+                button.BackgroundColor3 = selectedColor
+            elseif colorType == "text" then
+                Config.ESP.TextColor = selectedColor
+                button.BackgroundColor3 = selectedColor
+            elseif colorType == "line" then
+                Config.ESP.LineColor = selectedColor
+                button.BackgroundColor3 = selectedColor
+            end
+        end
+        screenGui:Destroy()
+        ColorPalette = nil
+    end)
+    
+    ColorPalette = screenGui
+end
+
+local function CreateGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "ESP_GUI"
+    screenGui.Parent = game.CoreGui
+    
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 280, 0, 600)
+    mainFrame.Position = UDim2.new(0.5, -140, 0.5, -300)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 30, 60)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = mainFrame
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "Title"
+    titleLabel.Size = UDim2.new(1, -40, 0, 40)
+    titleLabel.Position = UDim2.new(0, 0, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "GUI by sslkin"
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextScaled = true
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Parent = mainFrame
+    
+    local collapseButton = Instance.new("TextButton")
+    collapseButton.Name = "CollapseButton"
+    collapseButton.Size = UDim2.new(0, 30, 0, 30)
+    collapseButton.Position = UDim2.new(1, -35, 0, 5)
+    collapseButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+    collapseButton.Text = "−"
+    collapseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    collapseButton.TextScaled = true
+    collapseButton.Font = Enum.Font.GothamBold
+    collapseButton.Parent = mainFrame
+    
+    local collapseCorner = Instance.new("UICorner")
+    collapseCorner.CornerRadius = UDim.new(0, 6)
+    collapseCorner.Parent = collapseButton
+    
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Name = "ScrollFrame"
+    scrollFrame.Size = UDim2.new(1, 0, 1, -40)
+    scrollFrame.Position = UDim2.new(0, 0, 0, 40)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.ScrollBarThickness = 6
+    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 150, 255)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
+    scrollFrame.Parent = mainFrame
+    
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Name = "ContentFrame"
+    contentFrame.Size = UDim2.new(1, 0, 1, 0)
+    contentFrame.Position = UDim2.new(0, 0, 0, 0)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = scrollFrame
+    
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Name = "ToggleButton"
+    toggleButton.Size = UDim2.new(0.8, 0, 0, 35)
+    toggleButton.Position = UDim2.new(0.1, 0, 0.02, 0)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    toggleButton.Text = Config.Toggle and "ESP: ON" or "ESP: OFF"
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.TextScaled = true
+    toggleButton.Font = Enum.Font.Gotham
+    toggleButton.Parent = contentFrame
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 8)
+    toggleCorner.Parent = toggleButton
+    
+    local keyButton = Instance.new("TextButton")
+    keyButton.Name = "KeyButton"
+    keyButton.Size = UDim2.new(0.8, 0, 0, 30)
+    keyButton.Position = UDim2.new(0.1, 0, 0.1, 0)
+    keyButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    keyButton.Text = "Key: [" .. Config.ToggleKey.Name:sub(8) .. "]"
+    keyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    keyButton.TextScaled = true
+    keyButton.Font = Enum.Font.Gotham
+    keyButton.Parent = contentFrame
+    
+    local keyCorner = Instance.new("UICorner")
+    keyCorner.CornerRadius = UDim.new(0, 8)
+    keyCorner.Parent = keyButton
+    
+    local teamCheckButton = Instance.new("TextButton")
+    teamCheckButton.Name = "TeamCheckButton"
+    teamCheckButton.Size = UDim2.new(0.8, 0, 0, 30)
+    teamCheckButton.Position = UDim2.new(0.1, 0, 0.18, 0)
+    teamCheckButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    teamCheckButton.Text = Config.TeamCheck and "Team Check: ON" or "Team Check: OFF"
+    teamCheckButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    teamCheckButton.TextScaled = true
+    teamCheckButton.Font = Enum.Font.Gotham
+    teamCheckButton.Parent = contentFrame
+    
+    local teamCheckCorner = Instance.new("UICorner")
+    teamCheckCorner.CornerRadius = UDim.new(0, 8)
+    teamCheckCorner.Parent = teamCheckButton
+    
+    local rainbowButton = Instance.new("TextButton")
+    rainbowButton.Name = "RainbowButton"
+    rainbowButton.Size = UDim2.new(0.8, 0, 0, 30)
+    rainbowButton.Position = UDim2.new(0.1, 0, 0.26, 0)
+    rainbowButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    rainbowButton.Text = Config.ESP.RainbowMode and "Rainbow: ON" or "Rainbow: OFF"
+    rainbowButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    rainbowButton.TextScaled = true
+    rainbowButton.Font = Enum.Font.Gotham
+    rainbowButton.Parent = contentFrame
+    
+    local rainbowCorner = Instance.new("UICorner")
+    rainbowCorner.CornerRadius = UDim.new(0, 8)
+    rainbowCorner.Parent = rainbowButton
+    
+    local settingsLabel = Instance.new("TextLabel")
+    settingsLabel.Name = "SettingsLabel"
+    settingsLabel.Size = UDim2.new(0.8, 0, 0, 25)
+    settingsLabel.Position = UDim2.new(0.1, 0, 0.36, 0)
+    settingsLabel.BackgroundTransparency = 1
+    settingsLabel.Text = "ESP Settings:"
+    settingsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    settingsLabel.TextScaled = true
+    settingsLabel.Font = Enum.Font.GothamBold
+    settingsLabel.Parent = contentFrame
+    
+    local outlineButton = Instance.new("TextButton")
+    outlineButton.Name = "OutlineButton"
+    outlineButton.Size = UDim2.new(0.8, 0, 0, 30)
+    outlineButton.Position = UDim2.new(0.1, 0, 0.44, 0)
+    outlineButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    outlineButton.Text = Config.ESP.ShowOutline and "Outline: ON" or "Outline: OFF"
+    outlineButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    outlineButton.TextScaled = true
+    outlineButton.Font = Enum.Font.Gotham
+    outlineButton.Parent = contentFrame
+    
+    local outlineCorner = Instance.new("UICorner")
+    outlineCorner.CornerRadius = UDim.new(0, 8)
+    outlineCorner.Parent = outlineButton
+    
+    local linesButton = Instance.new("TextButton")
+    linesButton.Name = "LinesButton"
+    linesButton.Size = UDim2.new(0.8, 0, 0, 30)
+    linesButton.Position = UDim2.new(0.1, 0, 0.52, 0)
+    linesButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    linesButton.Text = Config.ESP.ShowLines and "Lines: ON" or "Lines: OFF"
+    linesButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    linesButton.TextScaled = true
+    linesButton.Font = Enum.Font.Gotham
+    linesButton.Parent = contentFrame
+    
+    local linesCorner = Instance.new("UICorner")
+    linesCorner.CornerRadius = UDim.new(0, 8)
+    linesCorner.Parent = linesButton
+    
+    local aimbotLabel = Instance.new("TextLabel")
+    aimbotLabel.Name = "AimbotLabel"
+    aimbotLabel.Size = UDim2.new(0.8, 0, 0, 25)
+    aimbotLabel.Position = UDim2.new(0.1, 0, 0.62, 0)
+    aimbotLabel.BackgroundTransparency = 1
+    aimbotLabel.Text = "Aimbot:"
+    aimbotLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    aimbotLabel.TextScaled = true
+    aimbotLabel.Font = Enum.Font.GothamBold
+    aimbotLabel.Parent = contentFrame
+    
+    local aimbotButton = Instance.new("TextButton")
+    aimbotButton.Name = "AimbotButton"
+    aimbotButton.Size = UDim2.new(0.8, 0, 0, 30)
+    aimbotButton.Position = UDim2.new(0.1, 0, 0.7, 0)
+    aimbotButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    aimbotButton.Text = aimbotEnabled and "Aimbot: ON" or "Aimbot: OFF"
+    aimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    aimbotButton.TextScaled = true
+    aimbotButton.Font = Enum.Font.Gotham
+    aimbotButton.Parent = contentFrame
+    
+    local aimbotCorner = Instance.new("UICorner")
+    aimbotCorner.CornerRadius = UDim.new(0, 8)
+    aimbotCorner.Parent = aimbotButton
+    
+    local aimbotKeyButton = Instance.new("TextButton")
+    aimbotKeyButton.Name = "AimbotKeyButton"
+    aimbotKeyButton.Size = UDim2.new(0.8, 0, 0, 30)
+    aimbotKeyButton.Position = UDim2.new(0.1, 0, 0.78, 0)
+    aimbotKeyButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    aimbotKeyButton.Text = "Aimbot Key: [" .. Config.Aimbot.ToggleKey.Name:sub(8) .. "]"
+    aimbotKeyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    aimbotKeyButton.TextScaled = true
+    aimbotKeyButton.Font = Enum.Font.Gotham
+    aimbotKeyButton.Parent = contentFrame
+    
+    local aimbotKeyCorner = Instance.new("UICorner")
+    aimbotKeyCorner.CornerRadius = UDim.new(0, 8)
+    aimbotKeyCorner.Parent = aimbotKeyButton
+    
+    local visibilityButton = Instance.new("TextButton")
+    visibilityButton.Name = "VisibilityButton"
+    visibilityButton.Size = UDim2.new(0.8, 0, 0, 30)
+    visibilityButton.Position = UDim2.new(0.1, 0, 0.86, 0)
+    visibilityButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    visibilityButton.Text = Config.Aimbot.VisibilityCheck and "Visibility: ON" or "Visibility: OFF"
+    visibilityButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    visibilityButton.TextScaled = true
+    visibilityButton.Font = Enum.Font.Gotham
+    visibilityButton.Parent = contentFrame
+    
+    local visibilityCorner = Instance.new("UICorner")
+    visibilityCorner.CornerRadius = UDim.new(0, 8)
+    visibilityCorner.Parent = visibilityButton
+    
+    local aimbotTeamCheckButton = Instance.new("TextButton")
+    aimbotTeamCheckButton.Name = "AimbotTeamCheckButton"
+    aimbotTeamCheckButton.Size = UDim2.new(0.8, 0, 0, 30)
+    aimbotTeamCheckButton.Position = UDim2.new(0.1, 0, 0.94, 0)
+    aimbotTeamCheckButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    aimbotTeamCheckButton.Text = Config.Aimbot.TeamCheck and "Aimbot Team Check: ON" or "Aimbot Team Check: OFF"
+    aimbotTeamCheckButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    aimbotTeamCheckButton.TextScaled = true
+    aimbotTeamCheckButton.Font = Enum.Font.Gotham
+    aimbotTeamCheckButton.Parent = contentFrame
+    
+    local aimbotTeamCheckCorner = Instance.new("UICorner")
+    aimbotTeamCheckCorner.CornerRadius = UDim.new(0, 8)
+    aimbotTeamCheckCorner.Parent = aimbotTeamCheckButton
+    
+    local fovLabel = Instance.new("TextLabel")
+    fovLabel.Name = "FOVLabel"
+    fovLabel.Size = UDim2.new(0.8, 0, 0, 20)
+    fovLabel.Position = UDim2.new(0.1, 0, 1.02, 0)
+    fovLabel.BackgroundTransparency = 1
+    fovLabel.Text = "FOV: " .. Config.Aimbot.FOV
+    fovLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fovLabel.TextScaled = true
+    fovLabel.Font = Enum.Font.Gotham
+    fovLabel.Parent = contentFrame
+    
+    local fovSlider = Instance.new("TextButton")
+    fovSlider.Name = "FOVSlider"
+    fovSlider.Size = UDim2.new(0.8, 0, 0, 15)
+    fovSlider.Position = UDim2.new(0.1, 0, 1.06, 0)
+    fovSlider.BackgroundColor3 = Color3.fromRGB(60, 70, 100)
+    fovSlider.Text = ""
+    fovSlider.Parent = contentFrame
+    
+    local fovSliderCorner = Instance.new("UICorner")
+    fovSliderCorner.CornerRadius = UDim.new(0, 6)
+    fovSliderCorner.Parent = fovSlider
+    
+    local fovSliderFill = Instance.new("Frame")
+    fovSliderFill.Name = "FOVSliderFill"
+    fovSliderFill.Size = UDim2.new((Config.Aimbot.FOV - 50) / 200, 0, 1, 0)
+    fovSliderFill.Position = UDim2.new(0, 0, 0, 0)
+    fovSliderFill.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+    fovSliderFill.Parent = fovSlider
+    
+    local fovSliderFillCorner = Instance.new("UICorner")
+    fovSliderFillCorner.CornerRadius = UDim.new(0, 6)
+    fovSliderFillCorner.Parent = fovSliderFill
+    
+    local colorLabel = Instance.new("TextLabel")
+    colorLabel.Name = "ColorLabel"
+    colorLabel.Size = UDim2.new(0.8, 0, 0, 25)
+    colorLabel.Position = UDim2.new(0.1, 0, 1.14, 0)
+    colorLabel.BackgroundTransparency = 1
+    colorLabel.Text = "ESP Colors:"
+    colorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    colorLabel.TextScaled = true
+    colorLabel.Font = Enum.Font.GothamBold
+    colorLabel.Parent = contentFrame
+    
+    local fillColorLabel = Instance.new("TextLabel")
+    fillColorLabel.Name = "FillColorLabel"
+    fillColorLabel.Size = UDim2.new(0.35, 0, 0, 20)
+    fillColorLabel.Position = UDim2.new(0.1, 0, 1.22, 0)
+    fillColorLabel.BackgroundTransparency = 1
+    fillColorLabel.Text = "Fill Color:"
+    fillColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fillColorLabel.TextScaled = true
+    fillColorLabel.Font = Enum.Font.Gotham
+    fillColorLabel.Parent = contentFrame
+    
+    local fillColorButton = Instance.new("TextButton")
+    fillColorButton.Name = "FillColorButton"
+    fillColorButton.Size = UDim2.new(0.35, 0, 0, 30)
+    fillColorButton.Position = UDim2.new(0.1, 0, 1.28, 0)
+    fillColorButton.BackgroundColor3 = Config.ESP.FillColor
+    fillColorButton.Text = ""
+    fillColorButton.Parent = contentFrame
+    
+    local fillColorCorner = Instance.new("UICorner")
+    fillColorCorner.CornerRadius = UDim.new(0, 6)
+    fillColorCorner.Parent = fillColorButton
+    
+    local outlineColorLabel = Instance.new("TextLabel")
+    outlineColorLabel.Name = "OutlineColorLabel"
+    outlineColorLabel.Size = UDim2.new(0.35, 0, 0, 20)
+    outlineColorLabel.Position = UDim2.new(0.55, 0, 1.22, 0)
+    outlineColorLabel.BackgroundTransparency = 1
+    outlineColorLabel.Text = "Outline Color:"
+    outlineColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    outlineColorLabel.TextScaled = true
+    outlineColorLabel.Font = Enum.Font.Gotham
+    outlineColorLabel.Parent = contentFrame
+    
+    local outlineColorButton = Instance.new("TextButton")
+    outlineColorButton.Name = "OutlineColorButton"
+    outlineColorButton.Size = UDim2.new(0.35, 0, 0, 30)
+    outlineColorButton.Position = UDim2.new(0.55, 0, 1.28, 0)
+    outlineColorButton.BackgroundColor3 = Config.ESP.OutlineColor
+    outlineColorButton.Text = ""
+    outlineColorButton.Parent = contentFrame
+    
+    local outlineColorCorner = Instance.new("UICorner")
+    outlineColorCorner.CornerRadius = UDim.new(0, 6)
+    outlineColorCorner.Parent = outlineColorButton
+    
+    local textColorLabel = Instance.new("TextLabel")
+    textColorLabel.Name = "TextColorLabel"
+    textColorLabel.Size = UDim2.new(0.35, 0, 0, 20)
+    textColorLabel.Position = UDim2.new(0.1, 0, 1.38, 0)
+    textColorLabel.BackgroundTransparency = 1
+    textColorLabel.Text = "Text Color:"
+    textColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textColorLabel.TextScaled = true
+    textColorLabel.Font = Enum.Font.Gotham
+    textColorLabel.Parent = contentFrame
+    
+    local textColorButton = Instance.new("TextButton")
+    textColorButton.Name = "TextColorButton"
+    textColorButton.Size = UDim2.new(0.35, 0, 0, 30)
+    textColorButton.Position = UDim2.new(0.1, 0, 1.44, 0)
+    textColorButton.BackgroundColor3 = Config.ESP.TextColor
+    textColorButton.Text = ""
+    textColorButton.Parent = contentFrame
+    
+    local textColorCorner = Instance.new("UICorner")
+    textColorCorner.CornerRadius = UDim.new(0, 6)
+    textColorCorner.Parent = textColorButton
+    
+    local lineColorLabel = Instance.new("TextLabel")
+    lineColorLabel.Name = "LineColorLabel"
+    lineColorLabel.Size = UDim2.new(0.35, 0, 0, 20)
+    lineColorLabel.Position = UDim2.new(0.55, 0, 1.38, 0)
+    lineColorLabel.BackgroundTransparency = 1
+    lineColorLabel.Text = "Line Color:"
+    lineColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    lineColorLabel.TextScaled = true
+    lineColorLabel.Font = Enum.Font.Gotham
+    lineColorLabel.Parent = contentFrame
+    
+    local lineColorButton = Instance.new("TextButton")
+    lineColorButton.Name = "LineColorButton"
+    lineColorButton.Size = UDim2.new(0.35, 0, 0, 30)
+    lineColorButton.Position = UDim2.new(0.55, 0, 1.44, 0)
+    lineColorButton.BackgroundColor3 = Config.ESP.LineColor
+    lineColorButton.Text = ""
+    lineColorButton.Parent = contentFrame
+    
+    local lineColorCorner = Instance.new("UICorner")
+    lineColorCorner.CornerRadius = UDim.new(0, 6)
+    lineColorCorner.Parent = lineColorButton
+    
+    local function setToggleKey()
+        keyButton.Text = "Press any key..."
+        keyButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+        
+        local connection
+        connection = UserInputService.InputBegan:Connect(function(input)
+            if input.KeyCode ~= Enum.KeyCode.Unknown then
+                Config.ToggleKey = input.KeyCode
+                keyButton.Text = "Key: [" .. Config.ToggleKey.Name:sub(8) .. "]"
+                keyButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+                connection:Disconnect()
+            end
+        end)
+    end
+    
+    local function setAimbotKey()
+        aimbotKeyButton.Text = "Press any key..."
+        aimbotKeyButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+        
+        local connection
+        connection = UserInputService.InputBegan:Connect(function(input)
+            if input.KeyCode ~= Enum.KeyCode.Unknown then
+                Config.Aimbot.ToggleKey = input.KeyCode
+                aimbotKeyButton.Text = "Aimbot Key: [" .. Config.Aimbot.ToggleKey.Name:sub(8) .. "]"
+                aimbotKeyButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+                connection:Disconnect()
+            end
+        end)
+    end
+    
+    local function toggleMenu()
+        MenuCollapsed = not MenuCollapsed
+        
+        local targetSize = MenuCollapsed and UDim2.new(0, 280, 0, 40) or UDim2.new(0, 280, 0, 600)
+        local targetText = MenuCollapsed and "+" or "−"
+        local targetColor = MenuCollapsed and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+        
+        local sizeTween = TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = targetSize
+        })
+        
+        local textTween = TweenService:Create(collapseButton, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = targetColor
+        })
+        
+        sizeTween:Play()
+        textTween:Play()
+        
+        collapseButton.Text = targetText
+    end
+    
+    toggleButton.MouseButton1Click:Connect(function()
+        Config.Toggle = not Config.Toggle
+        getgenv().Toggle = Config.Toggle
+        UpdateGUIButtons()
+        if not Config.Toggle then
+            ClearAllESP()
+        end
+    end)
+    
+    keyButton.MouseButton1Click:Connect(setToggleKey)
+    
+    teamCheckButton.MouseButton1Click:Connect(function()
+        Config.TeamCheck = not Config.TeamCheck
+        getgenv().TC = Config.TeamCheck
+        UpdateGUIButtons()
+    end)
+    
+    rainbowButton.MouseButton1Click:Connect(function()
+        Config.ESP.RainbowMode = not Config.ESP.RainbowMode
+        UpdateGUIButtons()
+    end)
+    
+    outlineButton.MouseButton1Click:Connect(function()
+        Config.ESP.ShowOutline = not Config.ESP.ShowOutline
+        UpdateGUIButtons()
+    end)
+    
+    linesButton.MouseButton1Click:Connect(function()
+        Config.ESP.ShowLines = not Config.ESP.ShowLines
+        UpdateGUIButtons()
+    end)
+    
+    aimbotButton.MouseButton1Click:Connect(ToggleAimbot)
+    
+    aimbotKeyButton.MouseButton1Click:Connect(setAimbotKey)
+    
+    visibilityButton.MouseButton1Click:Connect(function()
+        Config.Aimbot.VisibilityCheck = not Config.Aimbot.VisibilityCheck
+        UpdateGUIButtons()
+    end)
+    
+    aimbotTeamCheckButton.MouseButton1Click:Connect(function()
+        Config.Aimbot.TeamCheck = not Config.Aimbot.TeamCheck
+        UpdateGUIButtons()
+    end)
+    
+    local fovDragging = false
+    fovSlider.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            fovDragging = true
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement and fovDragging then
+            local mousePos = UserInputService:GetMouseLocation()
+            local sliderPos = fovSlider.AbsolutePosition
+            local sliderSize = fovSlider.AbsoluteSize
+            local relativeX = (mousePos.X - sliderPos.X) / sliderSize.X
+            relativeX = math.clamp(relativeX, 0, 1)
+            
+            local newFOV = math.floor(50 + (relativeX * 200))
+            Config.Aimbot.FOV = newFOV
+            
+            fovLabel.Text = "FOV: " .. newFOV
+            fovSliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
+            
+            if FOVring then
+                FOVring.Radius = newFOV
+            end
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            fovDragging = false
+        end
+    end)
+    
+    fillColorButton.MouseButton1Click:Connect(function()
+        CreateColorPalette("fill", fillColorButton)
+    end)
+    
+    outlineColorButton.MouseButton1Click:Connect(function()
+        CreateColorPalette("outline", outlineColorButton)
+    end)
+    
+    textColorButton.MouseButton1Click:Connect(function()
+        CreateColorPalette("text", textColorButton)
+    end)
+    
+    lineColorButton.MouseButton1Click:Connect(function()
+        CreateColorPalette("line", lineColorButton)
+    end)
+    
+    collapseButton.MouseButton1Click:Connect(toggleMenu)
+    
+    GUIButtons = {
+        toggleButton = toggleButton,
+        outlineButton = outlineButton,
+        linesButton = linesButton,
+        keyButton = keyButton,
+        teamCheckButton = teamCheckButton,
+        rainbowButton = rainbowButton,
+        aimbotButton = aimbotButton,
+        aimbotKeyButton = aimbotKeyButton,
+        visibilityButton = visibilityButton,
+        aimbotTeamCheckButton = aimbotTeamCheckButton
+    }
+    
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+    
+    titleLabel.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    GUIFrame = mainFrame
+    return screenGui
+end
+
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Config.ToggleKey then
+        Config.Toggle = not Config.Toggle
+        getgenv().Toggle = Config.Toggle
+        UpdateGUIButtons()
+        if not Config.Toggle then
+            ClearAllESP()
+        end
+    end
+    
+    if input.KeyCode == Config.Aimbot.ToggleKey then
+        ToggleAimbot()
+    end
+end)
+
+Players.PlayerRemoving:Connect(OnPlayerRemoving)
+
+local connection
+connection = RunService.Heartbeat:Connect(function()
+    UpdateESP()
+end)
+
+CreateGUI()
+
+getgenv().Toggle = Config.Toggle
+getgenv().TC = Config.TeamCheck
+getgenv().PlayerName = Config.PlayerNameType
+
+print("Improved ESP script with GUI loaded!")
+print("Use getgenv().Toggle = false to disable")
+print("Use getgenv().TC = true to enable team check")
+print("Press [ to toggle ESP")
+print("Press F to toggle Aimbot") 
