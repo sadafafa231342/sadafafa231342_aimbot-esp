@@ -96,10 +96,39 @@ local function IsPlayerVisible(player)
     end
     
     local head = character.Head
-    local ray = Ray.new(camera.CFrame.Position, (head.Position - camera.CFrame.Position).Unit)
-    local hit, _ = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character, character})
+    local cameraPos = camera.CFrame.Position
+    local headPos = head.Position
+    local direction = (headPos - cameraPos).Unit
+    local distance = (headPos - cameraPos).Magnitude
     
-    return not hit
+    -- Create a ray from camera to player's head
+    local ray = Ray.new(cameraPos, direction * distance)
+    
+    -- Check for obstacles, ignoring the player's character and local player's character
+    local ignoreList = {LocalPlayer.Character, character}
+    
+    -- Use FindPartOnRayWithIgnoreList to check for obstacles
+    local hit, hitPart = workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+    
+    -- If we hit something, check if it's before the player's head
+    if hit and hitPart then
+        local hitDistance = (hit - cameraPos).Magnitude
+        -- If the hit point is closer than the player's head (with some tolerance), they're not visible
+        if hitDistance < distance - 2 then
+            return false
+        end
+    end
+    
+    -- Additional check: make sure the player's head is actually in front of the camera
+    local cameraCFrame = camera.CFrame
+    local headRelative = cameraCFrame:PointToObjectSpace(headPos)
+    
+    -- If the head is behind the camera, it's not visible
+    if headRelative.Z < 0 then
+        return false
+    end
+    
+    return true
 end
 
 local function GetRainbowColor()
@@ -623,7 +652,7 @@ local function CreateGUI()
     
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 280, 0, 600)
+    mainFrame.Size = UDim2.new(0, 280, 0, 700)
     mainFrame.Position = UDim2.new(0.5, -140, 0.5, -300)
     mainFrame.BackgroundColor3 = Color3.fromRGB(20, 30, 60)
     mainFrame.BorderSizePixel = 0
@@ -666,7 +695,7 @@ local function CreateGUI()
     scrollFrame.BackgroundTransparency = 1
     scrollFrame.ScrollBarThickness = 6
     scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 150, 255)
-    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 900)
     scrollFrame.Parent = mainFrame
     
     local contentFrame = Instance.new("Frame")
@@ -988,7 +1017,7 @@ local function CreateGUI()
     local fovRainbowButton = Instance.new("TextButton")
     fovRainbowButton.Name = "FOVRainbowButton"
     fovRainbowButton.Size = UDim2.new(0.8, 0, 0, 30)
-    fovRainbowButton.Position = UDim2.new(0.1, 0, 1.1, 0)
+    fovRainbowButton.Position = UDim2.new(0.1, 0, 1.54, 0)
     fovRainbowButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
     fovRainbowButton.Text = Config.Aimbot.FOVRainbow and "FOV Rainbow: ON" or "FOV Rainbow: OFF"
     fovRainbowButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1003,7 +1032,7 @@ local function CreateGUI()
     local fovColorLabel = Instance.new("TextLabel")
     fovColorLabel.Name = "FOVColorLabel"
     fovColorLabel.Size = UDim2.new(0.35, 0, 0, 20)
-    fovColorLabel.Position = UDim2.new(0.1, 0, 1.18, 0)
+    fovColorLabel.Position = UDim2.new(0.1, 0, 1.62, 0)
     fovColorLabel.BackgroundTransparency = 1
     fovColorLabel.Text = "FOV Color:"
     fovColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1014,7 +1043,7 @@ local function CreateGUI()
     local fovColorButton = Instance.new("TextButton")
     fovColorButton.Name = "FOVColorButton"
     fovColorButton.Size = UDim2.new(0.35, 0, 0, 30)
-    fovColorButton.Position = UDim2.new(0.1, 0, 1.24, 0)
+    fovColorButton.Position = UDim2.new(0.1, 0, 1.68, 0)
     fovColorButton.BackgroundColor3 = Config.Aimbot.FOVColor
     fovColorButton.Text = ""
     fovColorButton.Parent = contentFrame
@@ -1056,7 +1085,7 @@ local function CreateGUI()
     local function toggleMenu()
         MenuCollapsed = not MenuCollapsed
         
-        local targetSize = MenuCollapsed and UDim2.new(0, 280, 0, 40) or UDim2.new(0, 280, 0, 600)
+        local targetSize = MenuCollapsed and UDim2.new(0, 280, 0, 40) or UDim2.new(0, 280, 0, 700)
         local targetText = MenuCollapsed and "+" or "−"
         local targetColor = MenuCollapsed and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
         
