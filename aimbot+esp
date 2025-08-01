@@ -98,34 +98,29 @@ local function IsPlayerVisible(player)
     local head = character.Head
     local cameraPos = camera.CFrame.Position
     local headPos = head.Position
-    local direction = (headPos - cameraPos).Unit
-    local distance = (headPos - cameraPos).Magnitude
     
-    -- Create a ray from camera to player's head
-    local ray = Ray.new(cameraPos, direction * distance)
-    
-    -- Check for obstacles, ignoring the player's character and local player's character
-    local ignoreList = {LocalPlayer.Character, character}
-    
-    -- Use FindPartOnRayWithIgnoreList to check for obstacles
-    local hit, hitPart = workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
-    
-    -- If we hit something, check if it's before the player's head
-    if hit and hitPart then
-        local hitDistance = (hit - cameraPos).Magnitude
-        -- If the hit point is closer than the player's head (with some tolerance), they're not visible
-        if hitDistance < distance - 2 then
-            return false
-        end
-    end
-    
-    -- Additional check: make sure the player's head is actually in front of the camera
+    -- Check if head is behind camera
     local cameraCFrame = camera.CFrame
     local headRelative = cameraCFrame:PointToObjectSpace(headPos)
-    
-    -- If the head is behind the camera, it's not visible
     if headRelative.Z < 0 then
         return false
+    end
+    
+    -- Create ray from camera to head
+    local direction = (headPos - cameraPos).Unit
+    local distance = (headPos - cameraPos).Magnitude
+    local ray = Ray.new(cameraPos, direction * distance)
+    
+    -- Check for obstacles
+    local ignoreList = {LocalPlayer.Character, character}
+    local hit, hitPart = workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+    
+    if hit then
+        local hitDistance = (hit - cameraPos).Magnitude
+        -- If hit point is closer than head (with tolerance), player is not visible
+        if hitDistance < distance - 1 then
+            return false
+        end
     end
     
     return true
@@ -405,10 +400,6 @@ local function GetClosestVisiblePlayer(camera)
             continue
         end
         
-        if not IsPlayerVisible(player) then
-            continue
-        end
-        
         local character = player.Character
         if character and character:FindFirstChild("Head") and character:FindFirstChild("Humanoid") then
             local humanoid = character.Humanoid
@@ -416,11 +407,16 @@ local function GetClosestVisiblePlayer(camera)
                 continue
             end
             
+            if not IsPlayerVisible(player) then
+                continue
+            end
+            
             local headPosition = character.Head.Position
             local screenPosition, onScreen = camera:WorldToViewportPoint(headPosition)
             
             if onScreen then
-                local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - camera.ViewportSize / 2).Magnitude
+                local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+                local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - screenCenter).Magnitude
                 if distance < Config.Aimbot.FOV and distance < closestDistance then
                     closestDistance = distance
                     closestPlayer = player
@@ -442,17 +438,16 @@ local function UpdateAimbot()
     
     if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head") then
         local headPosition = closestPlayer.Character.Head.Position
-        camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, headPosition), Config.Aimbot.Smoothing)
+        local targetCFrame = CFrame.new(camera.CFrame.Position, headPosition)
+        camera.CFrame = camera.CFrame:Lerp(targetCFrame, Config.Aimbot.Smoothing)
     end
 end
 
 local function UpdateFOVRing()
     if FOVring then
-        if Config.Aimbot.FOVRainbow then
-            FOVring.Color = GetRainbowColor()
-        else
-            FOVring.Color = Config.Aimbot.FOVColor
-        end
+        FOVring.Position = workspace.CurrentCamera.ViewportSize / 2
+        FOVring.Radius = Config.Aimbot.FOV
+        FOVring.Color = Config.Aimbot.FOVRainbow and GetRainbowColor() or Config.Aimbot.FOVColor
     end
 end
 
@@ -468,14 +463,17 @@ local function ToggleAimbot()
             FOVring.Transparency = 1
             FOVring.Color = Config.Aimbot.FOVRainbow and GetRainbowColor() or Config.Aimbot.FOVColor
             FOVring.Position = workspace.CurrentCamera.ViewportSize / 2
+            FOVring.Position = workspace.CurrentCamera.ViewportSize / 2
         end
         
-        if not aimbotConnection then
-            aimbotConnection = RunService.RenderStepped:Connect(function()
-                UpdateAimbot()
-                UpdateFOVRing()
-            end)
+        if aimbotConnection then
+            aimbotConnection:Disconnect()
         end
+        
+        aimbotConnection = RunService.RenderStepped:Connect(function()
+            UpdateAimbot()
+            UpdateFOVRing()
+        end)
     else
         if FOVring then
             FOVring:Remove()
@@ -652,8 +650,8 @@ local function CreateGUI()
     
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 280, 0, 700)
-    mainFrame.Position = UDim2.new(0.5, -140, 0.5, -300)
+    mainFrame.Size = UDim2.new(0, 280, 0, 800)
+    mainFrame.Position = UDim2.new(0.5, -140, 0.5, -350)
     mainFrame.BackgroundColor3 = Color3.fromRGB(20, 30, 60)
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
@@ -695,7 +693,7 @@ local function CreateGUI()
     scrollFrame.BackgroundTransparency = 1
     scrollFrame.ScrollBarThickness = 6
     scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 150, 255)
-    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 900)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1000)
     scrollFrame.Parent = mainFrame
     
     local contentFrame = Instance.new("Frame")
@@ -1017,7 +1015,7 @@ local function CreateGUI()
     local fovRainbowButton = Instance.new("TextButton")
     fovRainbowButton.Name = "FOVRainbowButton"
     fovRainbowButton.Size = UDim2.new(0.8, 0, 0, 30)
-    fovRainbowButton.Position = UDim2.new(0.1, 0, 1.54, 0)
+    fovRainbowButton.Position = UDim2.new(0.1, 0, 1.1, 0)
     fovRainbowButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
     fovRainbowButton.Text = Config.Aimbot.FOVRainbow and "FOV Rainbow: ON" or "FOV Rainbow: OFF"
     fovRainbowButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1032,7 +1030,7 @@ local function CreateGUI()
     local fovColorLabel = Instance.new("TextLabel")
     fovColorLabel.Name = "FOVColorLabel"
     fovColorLabel.Size = UDim2.new(0.35, 0, 0, 20)
-    fovColorLabel.Position = UDim2.new(0.1, 0, 1.62, 0)
+    fovColorLabel.Position = UDim2.new(0.1, 0, 1.18, 0)
     fovColorLabel.BackgroundTransparency = 1
     fovColorLabel.Text = "FOV Color:"
     fovColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1043,7 +1041,7 @@ local function CreateGUI()
     local fovColorButton = Instance.new("TextButton")
     fovColorButton.Name = "FOVColorButton"
     fovColorButton.Size = UDim2.new(0.35, 0, 0, 30)
-    fovColorButton.Position = UDim2.new(0.1, 0, 1.68, 0)
+    fovColorButton.Position = UDim2.new(0.1, 0, 1.24, 0)
     fovColorButton.BackgroundColor3 = Config.Aimbot.FOVColor
     fovColorButton.Text = ""
     fovColorButton.Parent = contentFrame
@@ -1085,7 +1083,7 @@ local function CreateGUI()
     local function toggleMenu()
         MenuCollapsed = not MenuCollapsed
         
-        local targetSize = MenuCollapsed and UDim2.new(0, 280, 0, 40) or UDim2.new(0, 280, 0, 700)
+        local targetSize = MenuCollapsed and UDim2.new(0, 280, 0, 40) or UDim2.new(0, 280, 0, 800)
         local targetText = MenuCollapsed and "+" or "−"
         local targetColor = MenuCollapsed and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
         
