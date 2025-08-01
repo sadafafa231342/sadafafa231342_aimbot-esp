@@ -14,7 +14,9 @@ local Config = {
         VisibilityCheck = true,
         FOV = 150,
         Smoothing = 1,
-        ToggleKey = Enum.KeyCode.F
+        ToggleKey = Enum.KeyCode.F,
+        FOVColor = Color3.fromRGB(255, 128, 128),
+        FOVRainbow = false
     },
     ESP = {
         FillTransparency = 0.5,
@@ -202,11 +204,25 @@ local function CreateLine(player)
     return line
 end
 
+local function GetDistance(player)
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return "N/A"
+    end
+    
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        return "N/A"
+    end
+    
+    local distance = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude)
+    return distance .. " meters"
+end
+
 local function UpdateESPText(player, textLabel)
     local name = GetPlayerName(player)
     local health = GetHealth(player)
+    local distance = GetDistance(player)
     
-    local text = string.format("%s | Health: %s", name, health)
+    local text = string.format("%s | Health: %s | %s", name, health, distance)
     
     textLabel.Text = text
     textLabel.TextColor3 = GetPlayerTextColor(player)
@@ -298,7 +314,11 @@ local function UpdateESP()
                 ESPInstances[player] = {}
             end
             
-            if not ESPInstances[player].highlight then
+            -- Check if highlight exists and is still valid
+            if not ESPInstances[player].highlight or not ESPInstances[player].highlight.Parent or ESPInstances[player].highlight.Parent ~= player.Character then
+                if ESPInstances[player].highlight then
+                    ESPInstances[player].highlight:Destroy()
+                end
                 ESPInstances[player].highlight = CreateESPHighlight(player)
             else
                 ESPInstances[player].highlight.FillColor = GetPlayerColor(player)
@@ -306,7 +326,11 @@ local function UpdateESP()
                 ESPInstances[player].highlight.OutlineTransparency = Config.ESP.ShowOutline and Config.ESP.OutlineTransparency or 1
             end
             
-            if not ESPInstances[player].billboard then
+            -- Check if billboard exists and is still valid
+            if not ESPInstances[player].billboard or not ESPInstances[player].billboard.Parent or ESPInstances[player].billboard.Parent ~= player.Character then
+                if ESPInstances[player].billboard then
+                    ESPInstances[player].billboard:Destroy()
+                end
                 ESPInstances[player].billboard, ESPInstances[player].textLabel = CreateESPText(player)
             else
                 UpdateESPText(player, ESPInstances[player].textLabel)
@@ -357,7 +381,12 @@ local function GetClosestVisiblePlayer(camera)
         end
         
         local character = player.Character
-        if character and character:FindFirstChild("Head") then
+        if character and character:FindFirstChild("Head") and character:FindFirstChild("Humanoid") then
+            local humanoid = character.Humanoid
+            if humanoid.Health <= 0.0 then
+                continue
+            end
+            
             local headPosition = character.Head.Position
             local screenPosition, onScreen = camera:WorldToViewportPoint(headPosition)
             
@@ -388,6 +417,16 @@ local function UpdateAimbot()
     end
 end
 
+local function UpdateFOVRing()
+    if FOVring then
+        if Config.Aimbot.FOVRainbow then
+            FOVring.Color = GetRainbowColor()
+        else
+            FOVring.Color = Config.Aimbot.FOVColor
+        end
+    end
+end
+
 local function ToggleAimbot()
     aimbotEnabled = not aimbotEnabled
     
@@ -398,12 +437,15 @@ local function ToggleAimbot()
             FOVring.Thickness = 1.5
             FOVring.Radius = Config.Aimbot.FOV
             FOVring.Transparency = 1
-            FOVring.Color = Color3.fromRGB(255, 128, 128)
+            FOVring.Color = Config.Aimbot.FOVRainbow and GetRainbowColor() or Config.Aimbot.FOVColor
             FOVring.Position = workspace.CurrentCamera.ViewportSize / 2
         end
         
         if not aimbotConnection then
-            aimbotConnection = RunService.RenderStepped:Connect(UpdateAimbot)
+            aimbotConnection = RunService.RenderStepped:Connect(function()
+                UpdateAimbot()
+                UpdateFOVRing()
+            end)
         end
     else
         if FOVring then
@@ -450,6 +492,9 @@ local function UpdateGUIButtons()
     end
     if GUIButtons.aimbotTeamCheckButton then
         GUIButtons.aimbotTeamCheckButton.Text = Config.Aimbot.TeamCheck and "Aimbot Team Check: ON" or "Aimbot Team Check: OFF"
+    end
+    if GUIButtons.fovRainbowButton then
+        GUIButtons.fovRainbowButton.Text = Config.Aimbot.FOVRainbow and "FOV Rainbow: ON" or "FOV Rainbow: OFF"
     end
 end
 
@@ -558,6 +603,9 @@ local function CreateColorPalette(colorType, button)
                 button.BackgroundColor3 = selectedColor
             elseif colorType == "line" then
                 Config.ESP.LineColor = selectedColor
+                button.BackgroundColor3 = selectedColor
+            elseif colorType == "fov" then
+                Config.Aimbot.FOVColor = selectedColor
                 button.BackgroundColor3 = selectedColor
             end
         end
@@ -937,6 +985,44 @@ local function CreateGUI()
     lineColorCorner.CornerRadius = UDim.new(0, 6)
     lineColorCorner.Parent = lineColorButton
     
+    local fovRainbowButton = Instance.new("TextButton")
+    fovRainbowButton.Name = "FOVRainbowButton"
+    fovRainbowButton.Size = UDim2.new(0.8, 0, 0, 30)
+    fovRainbowButton.Position = UDim2.new(0.1, 0, 1.1, 0)
+    fovRainbowButton.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+    fovRainbowButton.Text = Config.Aimbot.FOVRainbow and "FOV Rainbow: ON" or "FOV Rainbow: OFF"
+    fovRainbowButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fovRainbowButton.TextScaled = true
+    fovRainbowButton.Font = Enum.Font.Gotham
+    fovRainbowButton.Parent = contentFrame
+    
+    local fovRainbowCorner = Instance.new("UICorner")
+    fovRainbowCorner.CornerRadius = UDim.new(0, 8)
+    fovRainbowCorner.Parent = fovRainbowButton
+    
+    local fovColorLabel = Instance.new("TextLabel")
+    fovColorLabel.Name = "FOVColorLabel"
+    fovColorLabel.Size = UDim2.new(0.35, 0, 0, 20)
+    fovColorLabel.Position = UDim2.new(0.1, 0, 1.18, 0)
+    fovColorLabel.BackgroundTransparency = 1
+    fovColorLabel.Text = "FOV Color:"
+    fovColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fovColorLabel.TextScaled = true
+    fovColorLabel.Font = Enum.Font.Gotham
+    fovColorLabel.Parent = contentFrame
+    
+    local fovColorButton = Instance.new("TextButton")
+    fovColorButton.Name = "FOVColorButton"
+    fovColorButton.Size = UDim2.new(0.35, 0, 0, 30)
+    fovColorButton.Position = UDim2.new(0.1, 0, 1.24, 0)
+    fovColorButton.BackgroundColor3 = Config.Aimbot.FOVColor
+    fovColorButton.Text = ""
+    fovColorButton.Parent = contentFrame
+    
+    local fovColorCorner = Instance.new("UICorner")
+    fovColorCorner.CornerRadius = UDim.new(0, 6)
+    fovColorCorner.Parent = fovColorButton
+    
     local function setToggleKey()
         keyButton.Text = "Press any key..."
         keyButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
@@ -986,6 +1072,12 @@ local function CreateGUI()
         textTween:Play()
         
         collapseButton.Text = targetText
+        
+        if MenuCollapsed then
+            scrollFrame.Visible = false
+        else
+            scrollFrame.Visible = true
+        end
     end
     
     toggleButton.MouseButton1Click:Connect(function()
@@ -1032,6 +1124,15 @@ local function CreateGUI()
     aimbotTeamCheckButton.MouseButton1Click:Connect(function()
         Config.Aimbot.TeamCheck = not Config.Aimbot.TeamCheck
         UpdateGUIButtons()
+    end)
+    
+    fovRainbowButton.MouseButton1Click:Connect(function()
+        Config.Aimbot.FOVRainbow = not Config.Aimbot.FOVRainbow
+        UpdateGUIButtons()
+    end)
+    
+    fovColorButton.MouseButton1Click:Connect(function()
+        CreateColorPalette("fov", fovColorButton)
     end)
     
     local fovDragging = false
@@ -1095,7 +1196,8 @@ local function CreateGUI()
         aimbotButton = aimbotButton,
         aimbotKeyButton = aimbotKeyButton,
         visibilityButton = visibilityButton,
-        aimbotTeamCheckButton = aimbotTeamCheckButton
+        aimbotTeamCheckButton = aimbotTeamCheckButton,
+        fovRainbowButton = fovRainbowButton
     }
     
     local dragging = false
@@ -1143,6 +1245,37 @@ UserInputService.InputBegan:Connect(function(input)
 end)
 
 Players.PlayerRemoving:Connect(OnPlayerRemoving)
+
+-- Handle new characters being added
+local function OnCharacterAdded(character)
+    local player = Players:GetPlayerFromCharacter(character)
+    if player and player ~= LocalPlayer then
+        -- Clear any existing ESP for this player to force recreation
+        if ESPInstances[player] then
+            if ESPInstances[player].highlight then
+                ESPInstances[player].highlight:Destroy()
+            end
+            if ESPInstances[player].billboard then
+                ESPInstances[player].billboard:Destroy()
+            end
+            ESPInstances[player] = nil
+        end
+    end
+end
+
+-- Connect to CharacterAdded events for all players
+for _, player in pairs(Players:GetChildren()) do
+    if player ~= LocalPlayer then
+        player.CharacterAdded:Connect(OnCharacterAdded)
+    end
+end
+
+-- Connect to CharacterAdded for new players
+Players.PlayerAdded:Connect(function(player)
+    if player ~= LocalPlayer then
+        player.CharacterAdded:Connect(OnCharacterAdded)
+    end
+end)
 
 local connection
 connection = RunService.Heartbeat:Connect(function()
