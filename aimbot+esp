@@ -205,184 +205,276 @@ UserInputService.InputBegan:Connect(function(inp, gp)
     end
 end)
 
--- GUI Setup
-local ScreenGui = Instance.new("ScreenGui", CoreGui)
-ScreenGui.Name = "AimbotESP_UI"
+-- GUI Setup 
+local screenGui = Instance.new("ScreenGui", CoreGui)
+screenGui.Name = "SslkinGui"
+screenGui.ResetOnSpawn = false
 
-local main = Instance.new("Frame", ScreenGui)
-main.Name = "Main"
-main.Size = UDim2.new(0, 280, 0, 800)
-main.Position = UDim2.new(0, 20, 0, 20)
-main.BackgroundColor3 = Color3.fromRGB(25,25,35)
-main.Active = true
-main.Draggable = true
-Instance.new("UICorner", main).CornerRadius = UDim.new(0,10)
+local frame = Instance.new("Frame", screenGui)
+frame.Name = "MainFrame"
+frame.Position = UDim2.new(0, 20, 0.5, -200)
+frame.Size = UDim2.new(0, 300, 0, 0)
+frame.AutomaticSize = Enum.AutomaticSize.Y
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
 
--- Collapse button
-local collapseBtn = Instance.new("TextButton", main)
+local titleBar = Instance.new("Frame", frame)
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 36)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+
+local titleText = Instance.new("TextLabel", titleBar)
+titleText.Name = "TitleText"
+titleText.Size = UDim2.new(1, -40, 1, 0)
+titleText.Position = UDim2.new(0, 10, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "SSLKIN ESP + AIMBOT"
+titleText.Font = Enum.Font.GothamBold
+titleText.TextSize = 14
+titleText.TextColor3 = Color3.new(1, 1, 1)
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+
+local collapseBtn = Instance.new("TextButton", titleBar)
 collapseBtn.Name = "Collapse"
-collapseBtn.Size = UDim2.new(0,30,0,30)
-collapseBtn.Position = UDim2.new(1,-35,0,5)
+collapseBtn.Size = UDim2.new(0, 26, 0, 26)
+collapseBtn.Position = UDim2.new(1, -30, 0.5, -13)
 collapseBtn.Text = "−"
 collapseBtn.Font = Enum.Font.GothamBold
 collapseBtn.TextSize = 18
-collapseBtn.TextColor3 = Color3.new(1,1,1)
-collapseBtn.BackgroundColor3 = Color3.fromRGB(255,100,100)
-Instance.new("UICorner", collapseBtn).CornerRadius = UDim.new(0,6)
+collapseBtn.TextColor3 = Color3.new(1, 1, 1)
+collapseBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+Instance.new("UICorner", collapseBtn).CornerRadius = UDim.new(0, 6)
 
--- Title
-local title = Instance.new("TextLabel", main)
-title.Name = "Title"
-title.Size = UDim2.new(1,-40,0,30)
-title.Position = UDim2.new(0,10,0,5)
-title.Text = "GUI by sslkin"
-title.Font = Enum.Font.GothamBold
-title.TextSize = 14
-title.TextColor3 = Color3.new(1,1,1)
-title.BackgroundTransparency = 1
-
--- ScrollFrame for settings
-local scroll = Instance.new("ScrollingFrame", main)
-scroll.Name = "Settings"
-scroll.Size = UDim2.new(1,0,1,-60)
-scroll.Position = UDim2.new(0,0,0,60)
-scroll.BackgroundTransparency = 1
-scroll.CanvasSize = UDim2.new(0,0,0,600)
+local scroll = Instance.new("ScrollingFrame", frame)
+scroll.Position = UDim2.new(0, 0, 0, 30)
+scroll.Size = UDim2.new(1, 0, 1, -46)
+scroll.CanvasSize = UDim2.new(0, 0, 3, 0)
 scroll.ScrollBarThickness = 6
-local layout = Instance.new("UIListLayout", scroll)
-layout.Padding = UDim.new(0,6)
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+scroll.BackgroundTransparency = 1
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.ClipsDescendants = true
 
--- Smooth collapse toggle
-collapseBtn.MouseButton1Click:Connect(function()
+local innerContainer = Instance.new("Frame", scroll)
+innerContainer.Name = "InnerContainer"
+innerContainer.BackgroundTransparency = 1
+innerContainer.Size = UDim2.new(1, -20, 0, 0)
+innerContainer.Position = UDim2.new(0, 10, 0, 0)
+innerContainer.AutomaticSize = Enum.AutomaticSize.Y
+innerContainer.ClipsDescendants = false
+
+local UIListLayout = Instance.new("UIListLayout", innerContainer)
+UIListLayout.Padding = UDim.new(0, 6)
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function toggleMenu()
     Config.MenuCollapsed = not Config.MenuCollapsed
     local collapsed = Config.MenuCollapsed
-    local size = collapsed and UDim2.new(0,280,0,40) or UDim2.new(0,280,0,800)
+    local size = collapsed and UDim2.new(0, 280, 0, 40) or UDim2.new(0, 280, 0, 800)
     local text = collapsed and "+" or "−"
-    local color = collapsed and Color3.fromRGB(100,255,100) or Color3.fromRGB(255,100,100)
-    TweenService:Create(main, TweenInfo.new(0.3,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Size=size}):Play()
-    TweenService:Create(collapseBtn, TweenInfo.new(0.3,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{BackgroundColor3=color}):Play()
+    local color = collapsed and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+
+    TweenService:Create(frame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = size
+    }):Play()
+
+    TweenService:Create(collapseBtn, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundColor3 = color
+    }):Play()
+
     collapseBtn.Text = text
     scroll.Visible = not collapsed
+end
+
+collapseBtn.MouseButton1Click:Connect(toggleMenu)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if not gp and input.KeyCode == Enum.KeyCode.Insert then
+        toggleMenu()
+    end
 end)
 
--- GUI helper functions
-local function header(txt)
+local UIListLayout = Instance.new("UIListLayout", scroll)
+UIListLayout.Padding = UDim.new(0, 6)
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- Helper functions
+local function sectionHeader(text)
+	local lbl = Instance.new("TextLabel", scroll)
+	lbl.Text = text
+	lbl.Size = UDim2.new(1, -10, 0, 24)
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 16
+	lbl.TextColor3 = Color3.fromRGB(255,255,255)
+	lbl.BackgroundTransparency = 1
+end
+
+local function toggle(label, default, callback)
+	local btn = Instance.new("TextButton", scroll)
+	btn.Size = UDim2.new(1, -10, 0, 28)
+	btn.Text = label .. ": " .. (default and "ON" or "OFF")
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 14
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	btn.AutoButtonColor = false
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+
+	btn.MouseButton1Click:Connect(function()
+		default = not default
+		btn.Text = label .. ": " .. (default and "ON" or "OFF")
+		callback(default)
+	end)
+end
+
+local function slider(label, min, max, value, callback)
+	local container = Instance.new("Frame", scroll)
+	container.Size = UDim2.new(1, -10, 0, 36)
+	container.BackgroundTransparency = 1
+
+	local lbl = Instance.new("TextLabel", container)
+	lbl.Text = label .. ": " .. value
+	lbl.Size = UDim2.new(1, 0, 0.5, 0)
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 13
+	lbl.TextColor3 = Color3.new(1,1,1)
+	lbl.BackgroundTransparency = 1
+
+	local sliderBack = Instance.new("Frame", container)
+	sliderBack.Position = UDim2.new(0,0,0.5,4)
+	sliderBack.Size = UDim2.new(1, 0, 0, 6)
+	sliderBack.BackgroundColor3 = Color3.fromRGB(50,50,50)
+	Instance.new("UICorner", sliderBack).CornerRadius = UDim.new(1,0)
+
+	local sliderFill = Instance.new("Frame", sliderBack)
+	sliderFill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
+	sliderFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1,0)
+
+	local dragging = false
+	sliderBack.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+	RunService.RenderStepped:Connect(function()
+		if dragging then
+			local pos = UserInputService:GetMouseLocation().X
+			local abs = sliderBack.AbsolutePosition.X
+			local width = sliderBack.AbsoluteSize.X
+			local pct = math.clamp((pos - abs) / width, 0, 1)
+			local newVal = math.floor((min + (max - min) * pct) * 10) / 10
+			sliderFill.Size = UDim2.new(pct, 0, 1, 0)
+			lbl.Text = label .. ": " .. newVal
+			callback(newVal)
+		end
+	end)
+end
+
+local function colorPicker(labelText, currentColor, callback)
     local lbl = Instance.new("TextLabel", scroll)
-    lbl.Size = UDim2.new(0,260,0,25)
+    lbl.Text = labelText
+    lbl.TextColor3 = Color3.new(1,1,1)
     lbl.BackgroundTransparency = 1
-    lbl.Text = "🔹 "..txt
-    lbl.TextColor3 = Color3.fromRGB(140,200,255)
-    lbl.Font = Enum.Font.GothamBold
+    lbl.Size = UDim2.new(1, -10, 0, 20)
+    lbl.Font = Enum.Font.SourceSans
     lbl.TextSize = 14
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
+
+    local colors = {
+        Color3.fromRGB(255, 255, 255),
+        Color3.fromRGB(255, 0, 0),
+        Color3.fromRGB(0, 255, 0),
+        Color3.fromRGB(0, 0, 255),
+        Color3.fromRGB(255, 255, 0),
+        Color3.fromRGB(255, 0, 255),
+        Color3.fromRGB(0, 255, 255),
+        Color3.fromRGB(128, 128, 128),
+        Color3.fromRGB(255, 165, 0),
+    }
+
+    local row = Instance.new("Frame", scroll)
+    row.Size = UDim2.new(1, -10, 0, 28)
+    row.BackgroundTransparency = 1
+
+    local layout = Instance.new("UIListLayout", row)
+    layout.FillDirection = Enum.FillDirection.Horizontal
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    layout.Padding = UDim.new(0, 4)
+
+    for _, clr in pairs(colors) do
+        local btn = Instance.new("TextButton", row)
+        btn.Size = UDim2.new(0, 24, 0, 24)
+        btn.BackgroundColor3 = clr
+        btn.Text = ""
+        btn.AutoButtonColor = false
+        btn.MouseButton1Click:Connect(function()
+            callback(clr)
+        end)
+    end
 end
 
-local function toggle(name, getf, setf)
+-- 🔥 Горячие клавиши переключения ESP / Aimbot
+local function keyBindButton(name, currentKey, callback)
     local btn = Instance.new("TextButton", scroll)
-    btn.Size = UDim2.new(0,260,0,30)
-    btn.BackgroundColor3 = Color3.fromRGB(40,40,60)
+    btn.Size = UDim2.new(1, -10, 0, 24)
+    btn.Text = name .. " Hotkey: [" .. tostring(currentKey.Name) .. "]"
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
     btn.TextColor3 = Color3.new(1,1,1)
     btn.Font = Enum.Font.Gotham
-    btn.TextSize = 14
-    local function upd() btn.Text = name..": "..(getf() and "ON" or "OFF") end
-    upd()
-    btn.MouseButton1Click:Connect(function() setf(not getf()); upd() end)
+    btn.TextSize = 13
+    btn.AutoButtonColor = false
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
-end
 
-local function bindKey(label, getf, setf)
-    local btn = Instance.new("TextButton", scroll)
-    btn.Size = UDim2.new(0,260,0,30)
-    btn.BackgroundColor3 = Color3.fromRGB(60,60,80)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 14
-    local function upd() btn.Text = label..": ["..getf().Name.."]" end
-    upd()
     btn.MouseButton1Click:Connect(function()
-        btn.Text = "Press key..."
+        btn.Text = name .. " Hotkey: [Press any key]"
         local conn
-        conn = UserInputService.InputBegan:Connect(function(i,g)
-            if not g and i.UserInputType==Enum.UserInputType.Keyboard then
-                setf(i.KeyCode)
-                upd()
+        conn = UserInputService.InputBegan:Connect(function(input, gp)
+            if not gp and input.UserInputType == Enum.UserInputType.Keyboard then
                 conn:Disconnect()
+                callback(input.KeyCode)
+                btn.Text = name .. " Hotkey: [" .. tostring(input.KeyCode.Name) .. "]"
             end
         end)
     end)
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
 end
 
-local function slider(label, minv, maxv, getf, setf)
-    local lbl = Instance.new("TextLabel", scroll)
-    lbl.Size = UDim2.new(0,260,0,20)
-    lbl.BackgroundTransparency = 1
-    lbl.TextColor3 = Color3.fromRGB(220,220,220)
-    lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    local function upd() lbl.Text = label..": "..getf() end
-    upd()
+-- Кнопки назначения горячих клавиш
+keyBindButton("ESP", Config.ESP.ToggleKey, function(newKey)
+    Config.ESP.ToggleKey = newKey
+end)
 
-    local btn = Instance.new("TextButton", scroll)
-    btn.Size = UDim2.new(0,260,0,20)
-    btn.Text = "Set "..label
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 12
-    btn.BackgroundColor3 = Color3.fromRGB(70,70,90)
-    btn.MouseButton1Click:Connect(function()
-        local v = getf() + 25
-        if v > maxv then v = minv end
-        setf(v)
-        upd()
-    end)
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
-end
+keyBindButton("Aimbot", Config.Aimbot.ToggleKey, function(newKey)
+    Config.Aimbot.ToggleKey = newKey
+end)
 
-local function colorPicker(label, getf, setf)
-    local btn = Instance.new("TextButton", scroll)
-    btn.Size = UDim2.new(0,260,0,30)
-    btn.BackgroundColor3 = getf()
-    btn.Text = "🎨 "..label
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 14
-    btn.MouseButton1Click:Connect(function()
-        local list = {
-            Color3.fromRGB(255,255,255),
-            Config.ESP.TeamColor,
-            Config.ESP.EnemyColor,
-            Color3.fromRGB(255,0,255),
-            Color3.fromRGB(0,255,255),
-            Color3.fromRGB(255,165,0),
-            Color3.fromRGB(128,0,128),
-        }
-        local c = getf()
-        local idx = table.find(list, c) or 1
-        local nc = list[idx % #list + 1]
-        setf(nc)
-        btn.BackgroundColor3 = nc
-    end)
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
-end
+-- 🟦 ESP
+sectionHeader("ESP Settings")
+toggle("ESP Enabled", Config.ESP.Enabled, function(v) Config.ESP.Enabled = v end)
+toggle("Team Check", Config.ESP.TeamCheck, function(v) Config.ESP.TeamCheck = v end)
+toggle("Show Outline", Config.ESP.ShowOutline, function(v) Config.ESP.ShowOutline = v end)
+toggle("Show Lines", Config.ESP.ShowLines, function(v) Config.ESP.ShowLines = v end)
+toggle("Rainbow Colors", Config.ESP.Rainbow, function(v) Config.ESP.Rainbow = v end)
 
--- Populate GUI
-header("ESP Settings")
-toggle("ESP Enabled", function() return Config.ESP.Enabled end, function(v) Config.ESP.Enabled = v end)
-toggle("Team Check", function() return Config.ESP.TeamCheck end, function(v) Config.ESP.TeamCheck = v end)
-toggle("Show Lines", function() return Config.ESP.ShowLines end, function(v) Config.ESP.ShowLines = v end)
-toggle("Show Outline", function() return Config.ESP.ShowOutline end, function(v) Config.ESP.ShowOutline = v end)
-toggle("Rainbow Mode", function() return Config.ESP.Rainbow end, function(v) Config.ESP.Rainbow = v end)
-colorPicker("Fill Color", function() return Config.ESP.FillColor end, function(c) Config.ESP.FillColor = c end)
-colorPicker("Outline Color", function() return Config.ESP.OutlineColor end, function(c) Config.ESP.OutlineColor = c end)
-bindKey("ESP Toggle Key", function() return Config.ESP.ToggleKey end, function(k) Config.ESP.ToggleKey = k end)
+colorPicker("Fill Color", Config.ESP.FillColor, function(c) Config.ESP.FillColor = c end)
+colorPicker("Outline Color", Config.ESP.OutlineColor, function(c) Config.ESP.OutlineColor = c end)
+colorPicker("Text Color", Config.ESP.TextColor, function(c) Config.ESP.TextColor = c end)
+slider("Fill Transparency", 0, 1, Config.ESP.FillTransparency, function(v) Config.ESP.FillTransparency = v end)
+slider("Outline Transparency", 0, 1, Config.ESP.OutlineTransparency, function(v) Config.ESP.OutlineTransparency = v end)
 
-header("Aimbot Settings")
-toggle("Aimbot Enabled", function() return Config.Aimbot.Enabled end, function(v) Config.Aimbot.Enabled = v end)
-toggle("Team Check", function() return Config.Aimbot.TeamCheck end, function(v) Config.Aimbot.TeamCheck = v end)
-toggle("Visibility Check", function() return Config.Aimbot.VisibilityCheck end, function(v) Config.Aimbot.VisibilityCheck = v end)
-toggle("FOV Rainbow", function() return Config.Aimbot.FOVRainbow end, function(v) Config.Aimbot.FOVRainbow = v end)
-slider("FOV Size", 50,300, function() return Config.Aimbot.FOV end, function(v) Config.Aimbot.FOV = v end)
-colorPicker("FOV Color", function() return Config.Aimbot.FOVColor end, function(c) Config.Aimbot.FOVColor = c end)
-bindKey("Aimbot Toggle Key", function() return Config.Aimbot.ToggleKey end, function(k) Config.Aimbot.ToggleKey = k end)
+-- 🟥 Aimbot
+sectionHeader("Aimbot Settings")
+toggle("Aimbot Enabled", Config.Aimbot.Enabled, function(v) Config.Aimbot.Enabled = v end)
+toggle("Team Check", Config.Aimbot.TeamCheck, function(v) Config.Aimbot.TeamCheck = v end)
+toggle("Visibility Check", Config.Aimbot.VisibilityCheck, function(v) Config.Aimbot.VisibilityCheck = v end)
+slider("Smoothing", 0.1, 5, Config.Aimbot.Smoothing, function(v) Config.Aimbot.Smoothing = v end)
+slider("FOV Radius", 10, 500, Config.Aimbot.FOV, function(v) Config.Aimbot.FOV = v end)
+toggle("FOV Rainbow", Config.Aimbot.FOVRainbow, function(v) Config.Aimbot.FOVRainbow = v end)
+colorPicker("Aimbot FOV Color", Config.Aimbot.FOVColor, function(c) Config.Aimbot.FOVColor = c end)
+
