@@ -1,11 +1,13 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
 
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
+-- Configuration
 local Config = {
     ESP = {
         Enabled     = true,
@@ -33,10 +35,10 @@ local Config = {
         FOVColor        = Color3.fromRGB(255,128,128),
         FOVRainbow      = false,
     },
-    PlayerNameType = "DisplayName",
     MenuCollapsed = false,
 }
 
+-- State
 local ESPs, Lines = {}, {}
 local FOVCircle
 
@@ -46,7 +48,10 @@ FOVCircle.NumSides = 100
 FOVCircle.Filled = false
 FOVCircle.Visible = false
 
-local function getName(p) return p[Config.PlayerNameType] or p.Name end
+-- Utils
+local function getName(p)
+    return p.Name
+end
 local function getHealth(p)
     local h = p.Character and p.Character:FindFirstChild("Humanoid")
     return (h and h.Health>0) and math.floor(h.Health) or 0
@@ -73,6 +78,7 @@ local function rayVisible(p)
     return not workspace:Raycast(cam.CFrame.Position, head.Position-cam.CFrame.Position, rp)
 end
 
+-- ESP handlers
 local function createOrUpdateESP(p)
     if not ESPs[p] then
         local hl=Instance.new("Highlight"); hl.Adornee=p.Character; hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent=p.Character
@@ -91,6 +97,7 @@ local function removeESP(p)
     if Lines[p] then Lines[p]:Remove(); Lines[p]=nil end
 end
 
+-- Clean up on player leaving
 Players.PlayerRemoving:Connect(function(player)
     if ESPs[player] then
         ESPs[player].hl:Destroy()
@@ -127,6 +134,7 @@ local function getClosestTarget()
     return closest
 end
 
+-- Render loop: only alive players on server
 RunService.RenderStepped:Connect(function()
     local cam = workspace.CurrentCamera
     for _, player in ipairs(Players:GetPlayers()) do
@@ -170,12 +178,18 @@ if Config.Aimbot.Enabled then
     end
 end
 
+-- FOV Circle update
 local cam = workspace.CurrentCamera
 FOVCircle.Visible = Config.Aimbot.Enabled
 FOVCircle.Position = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
 FOVCircle.Color = Config.Aimbot.FOVRainbow and getRainbow() or Config.Aimbot.FOVColor
 FOVCircle.Radius = Config.Aimbot.FOV
 
+
+    -- Aimbot logic unchanged below...
+end)
+
+-- Hotkeys binding
 UserInputService.InputBegan:Connect(function(inp, gp)
     if gp then return end
     if inp.UserInputType == Enum.UserInputType.Keyboard then
@@ -189,6 +203,7 @@ UserInputService.InputBegan:Connect(function(inp, gp)
     end
 end)
 
+-- GUI Setup 
 local screenGui = Instance.new("ScreenGui", CoreGui)
 screenGui.Name = "SslkinGui"
 screenGui.ResetOnSpawn = false
@@ -283,6 +298,7 @@ local UIListLayout = Instance.new("UIListLayout", scroll)
 UIListLayout.Padding = UDim.new(0, 6)
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
+-- Helper functions
 local function sectionHeader(text)
 	local lbl = Instance.new("TextLabel", scroll)
 	lbl.Text = text
@@ -402,6 +418,7 @@ local function colorPicker(labelText, currentColor, callback)
     end
 end
 
+-- 🔥 Горячие клавиши переключения ESP / Aimbot
 local function keyBindButton(name, currentKey, callback)
     local btn = Instance.new("TextButton", scroll)
     btn.Size = UDim2.new(1, -10, 0, 24)
@@ -426,6 +443,7 @@ local function keyBindButton(name, currentKey, callback)
     end)
 end
 
+-- Кнопки назначения горячих клавиш
 keyBindButton("ESP", Config.ESP.ToggleKey, function(newKey)
     Config.ESP.ToggleKey = newKey
 end)
@@ -434,6 +452,7 @@ keyBindButton("Aimbot", Config.Aimbot.ToggleKey, function(newKey)
     Config.Aimbot.ToggleKey = newKey
 end)
 
+-- 🟦 ESP
 sectionHeader("🔷ESP Settings")
 toggle("ESP", Config.ESP.Enabled, function(v) Config.ESP.Enabled = v end)
 toggle("Team Check", Config.ESP.TeamCheck, function(v) Config.ESP.TeamCheck = v end)
@@ -447,6 +466,7 @@ colorPicker("Text Color", Config.ESP.TextColor, function(c) Config.ESP.TextColor
 slider("Fill Transparency", 0, 1, Config.ESP.FillTransparency, function(v) Config.ESP.FillTransparency = v end)
 slider("Outline Transparency", 0, 1, Config.ESP.OutlineTransparency, function(v) Config.ESP.OutlineTransparency = v end)
 
+-- 🟥 Aimbot
 sectionHeader("🔷Aimbot Settings")
 toggle("Aimbot", Config.Aimbot.Enabled, function(v) Config.Aimbot.Enabled = v end)
 toggle("Team Check", Config.Aimbot.TeamCheck, function(v) Config.Aimbot.TeamCheck = v end)
