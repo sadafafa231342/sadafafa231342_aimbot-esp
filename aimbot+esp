@@ -38,6 +38,116 @@ local Config = {
     MenuCollapsed = false,
 }
 
+local FlyConfig = {
+    Enabled = false,
+    Speed = 1,
+    ToggleKey = Enum.KeyCode.H,
+}
+
+-- 🛠️ Обновлённая реализация полёта
+local tpwalking = false
+local vertical = 0
+
+local function setPlatformState(enabled)
+    local hum = Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+        pcall(function()
+            hum:SetStateEnabled(state, enabled)
+        end)
+    end
+end
+
+local function startFly()
+    local plr = Players.LocalPlayer
+    local char = plr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    tpwalking = true
+    setPlatformState(false)
+    hum.PlatformStand = true
+    char.Animate.Disabled = true
+    for _, track in pairs(hum:GetPlayingAnimationTracks()) do track:AdjustSpeed(0) end
+
+    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    local bg = Instance.new("BodyGyro", torso)
+    bg.P = 9e4
+    bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bg.CFrame = torso.CFrame
+
+    local bv = Instance.new("BodyVelocity", torso)
+    bv.Velocity = Vector3.new(0, 0.1, 0)
+    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+
+    local ctrl = {f = 0, b = 0, l = 0, r = 0, u = 0, d = 0}
+
+    local inputDown = UserInputService.InputBegan:Connect(function(input, gp)
+        if gp then return end
+        if input.KeyCode == Enum.KeyCode.W then ctrl.f = 1
+        elseif input.KeyCode == Enum.KeyCode.S then ctrl.b = -1
+        elseif input.KeyCode == Enum.KeyCode.A then ctrl.l = -1
+        elseif input.KeyCode == Enum.KeyCode.D then ctrl.r = 1
+        elseif input.KeyCode == Enum.KeyCode.Space then ctrl.u = 1
+        elseif input.KeyCode == Enum.KeyCode.LeftControl then ctrl.d = -1 end
+    end)
+
+    local inputUp = UserInputService.InputEnded:Connect(function(input, gp)
+        if gp then return end
+        if input.KeyCode == Enum.KeyCode.W then ctrl.f = 0
+        elseif input.KeyCode == Enum.KeyCode.S then ctrl.b = 0
+        elseif input.KeyCode == Enum.KeyCode.A then ctrl.l = 0
+        elseif input.KeyCode == Enum.KeyCode.D then ctrl.r = 0
+        elseif input.KeyCode == Enum.KeyCode.Space then ctrl.u = 0
+        elseif input.KeyCode == Enum.KeyCode.LeftControl then ctrl.d = 0 end
+    end)
+
+    RunService.RenderStepped:Connect(function()
+        if not tpwalking then
+            inputDown:Disconnect()
+            inputUp:Disconnect()
+            bg:Destroy()
+            bv:Destroy()
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.PlatformStand = false
+                char.Animate.Disabled = false
+            end
+            return
+        end
+        local cam = workspace.CurrentCamera
+        local move = (cam.CFrame.lookVector * (ctrl.f + ctrl.b)) + (cam.CFrame.RightVector * (ctrl.r + ctrl.l)) + (Vector3.new(0, ctrl.u + ctrl.d, 0))
+        bv.Velocity = move.Unit * (FlyConfig.Speed * 10)
+        bg.CFrame = cam.CFrame * CFrame.Angles(-math.rad((ctrl.f + ctrl.b) * 50), 0, 0)
+    end)
+end
+
+local function stopFly()
+    tpwalking = false
+
+    local char = Players.LocalPlayer.Character
+    if char and char:FindFirstChildOfClass("Humanoid") then
+        char.Humanoid.PlatformStand = false
+        char.Animate.Disabled = false
+    end
+
+    -- Удалить BodyVelocity и BodyGyro вручную
+    local torso = char and (char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
+    if torso then
+        for _, obj in ipairs(torso:GetChildren()) do
+            if obj:IsA("BodyVelocity") or obj:IsA("BodyGyro") then
+                obj:Destroy()
+            end
+        end
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if not gp and input.KeyCode == FlyConfig.ToggleKey then
+        FlyConfig.Enabled = not FlyConfig.Enabled
+        if FlyConfig.Enabled then startFly() else stopFly() end
+    end
+end)
+
 -- State
 local ESPs, Lines = {}, {}
 local FOVCircle
@@ -474,3 +584,144 @@ toggle("Visibility Check", Config.Aimbot.VisibilityCheck, function(v) Config.Aim
 slider("FOV Radius", 10, 500, Config.Aimbot.FOV, function(v) Config.Aimbot.FOV = v end)
 toggle("FOV Rainbow", Config.Aimbot.FOVRainbow, function(v) Config.Aimbot.FOVRainbow = v end)
 colorPicker("Aimbot FOV Color", Config.Aimbot.FOVColor, function(c) Config.Aimbot.FOVColor = c end)
+
+-- 🟨 Fly System Integration
+
+-- Переменные для управления
+local FlyConfig = {
+    Enabled = false,
+    Speed = 1,
+    ToggleKey = Enum.KeyCode.H,
+}
+local tpwalking = false
+
+local function setPlatformState(enabled)
+    local hum = Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+        pcall(function()
+            hum:SetStateEnabled(state, enabled)
+        end)
+    end
+end
+
+local function startFly()
+    local speaker = Players.LocalPlayer
+    local chr = speaker.Character
+    local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
+    if not hum then return end
+
+    tpwalking = true
+    setPlatformState(false)
+    chr.Animate.Disabled = true
+    for _, track in pairs(hum:GetPlayingAnimationTracks()) do
+        track:AdjustSpeed(0)
+    end
+
+    spawn(function()
+        local hb = RunService.Heartbeat
+        while tpwalking and chr and hum and hum.Parent and hum.Health > 0 do
+            hb:Wait()
+            if hum.MoveDirection.Magnitude > 0 then
+                chr:TranslateBy(hum.MoveDirection)
+            end
+        end
+    end)
+
+    local torso = chr:FindFirstChild("Torso") or chr:FindFirstChild("UpperTorso")
+    local bg = Instance.new("BodyGyro", torso)
+    bg.P = 9e4
+    bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bg.CFrame = torso.CFrame
+
+    local bv = Instance.new("BodyVelocity", torso)
+    bv.Velocity = Vector3.new(0, 0.1, 0)
+    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+
+    local ctrl = {f = 0, b = 0, l = 0, r = 0}
+    local lastctrl = {f = 0, b = 0, l = 0, r = 0}
+    local speed = 0
+    local maxspeed = 50
+
+    local uisConn = UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            local k = input.KeyCode
+            if k == Enum.KeyCode.W then ctrl.f = FlyConfig.Speed
+            elseif k == Enum.KeyCode.S then ctrl.b = -FlyConfig.Speed
+            elseif k == Enum.KeyCode.A then ctrl.l = -FlyConfig.Speed
+            elseif k == Enum.KeyCode.D then ctrl.r = FlyConfig.Speed end
+        end
+    end)
+    local uisConn2 = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            local k = input.KeyCode
+            if k == Enum.KeyCode.W then ctrl.f = 0
+            elseif k == Enum.KeyCode.S then ctrl.b = 0
+            elseif k == Enum.KeyCode.A then ctrl.l = 0
+            elseif k == Enum.KeyCode.D then ctrl.r = 0 end
+        end
+    end)
+
+    local rsConn = RunService.RenderStepped:Connect(function()
+        if not tpwalking or not chr or not chr:FindFirstChild("Humanoid") then
+            uisConn:Disconnect()
+            uisConn2:Disconnect()
+            rsConn:Disconnect()
+            bg:Destroy()
+            bv:Destroy()
+            setPlatformState(true)
+            chr.Animate.Disabled = false
+            return
+        end
+
+        if ctrl.f + ctrl.b ~= 0 or ctrl.l + ctrl.r ~= 0 then
+            speed += 0.5 + (speed / maxspeed)
+            if speed > maxspeed then speed = maxspeed end
+        else
+            speed -= 1
+            if speed < 0 then speed = 0 end
+        end
+
+        if speed ~= 0 then
+            bv.Velocity = ((workspace.CurrentCamera.CFrame.lookVector * (ctrl.f + ctrl.b)) +
+                ((workspace.CurrentCamera.CFrame * CFrame.new(ctrl.l + ctrl.r, (ctrl.f + ctrl.b) * 0.2, 0)).Position - workspace.CurrentCamera.CFrame.Position)) * speed
+        else
+            bv.Velocity = Vector3.zero
+        end
+
+        bg.CFrame = workspace.CurrentCamera.CFrame * CFrame.Angles(-math.rad((ctrl.f + ctrl.b) * 50 * speed / maxspeed), 0, 0)
+    end)
+end
+
+local function stopFly()
+    tpwalking = false
+end
+
+-- Обработка нажатия клавиши
+UserInputService.InputBegan:Connect(function(input, gp)
+    if not gp and input.KeyCode == FlyConfig.ToggleKey then
+        FlyConfig.Enabled = not FlyConfig.Enabled
+        if FlyConfig.Enabled then
+            startFly()
+        else
+            stopFly()
+        end
+        print("Fly toggled:", FlyConfig.Enabled)
+    end
+end)
+
+-- GUI: Fly
+sectionHeader("🟨 Fly Settings")
+
+toggle("Fly", FlyConfig.Enabled, function(v)
+    FlyConfig.Enabled = v
+    if v then startFly() else stopFly() end
+end)
+
+keyBindButton("Fly", FlyConfig.ToggleKey, function(newKey)
+    FlyConfig.ToggleKey = newKey
+end)
+
+slider("Fly Speed", 1, 10, FlyConfig.Speed, function(v)
+    FlyConfig.Speed = math.floor(v)
+end)
